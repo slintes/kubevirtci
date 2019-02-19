@@ -139,6 +139,14 @@ all:
         osm_controller_args:
           feature-gates:
           - BlockVolume=true
+        openshift_master_audit_config:
+          enabled: true
+          logFormat: json
+          auditFilePath: "/var/lib/origin/audit-ocp.log"
+          policyFile: "/etc/origin/master/adv-audit.yaml"
+        openshift_enable_service_catalog: false
+        openshift_enable_olm: false
+        openshift_metrics_install_metrics: false
         openshift_node_groups:
         - name: node-config-master-infra-kubevirt
           labels:
@@ -179,6 +187,23 @@ all:
             - '40'
 EOF
 
+mkdir -p /etc/origin/master
+cat >/etc/origin/master/adv-audit.yaml <<EOF
+kind: Policy
+apiVersion: audit.k8s.io/v1beta1
+rules:
+- level: Metadata
+  users:
+  - system:serviceaccount:kubevirt:kubevirt-operator
+  - system:serviceaccount:kubevirt:kubevirt-apiserver
+  - system:serviceaccount:kubevirt:kubevirt-controller
+  - system:serviceaccount:kubevirt:kubevirt-handler
+  omitStages:
+  - RequestReceived
+  - ResponseStarted
+  - Panic
+EOF
+
 # Add cri-o variable to inventory file
 if [[ $1 == "true" ]]; then
     sed -i "s/    vars\:/    vars\:\n        openshift_use_crio: 'true'/" $inventory_file
@@ -188,7 +213,7 @@ fi
 ansible-playbook -e "ansible_user=root ansible_ssh_pass=vagrant" -i $inventory_file $openshift_ansible/playbooks/prerequisites.yml
 ansible-playbook -i $inventory_file $openshift_ansible/playbooks/deploy_cluster.yml
 # Install OLM
-ansible-playbook -i $inventory_file $openshift_ansible/playbooks/olm/config.yml
+#ansible-playbook -i $inventory_file $openshift_ansible/playbooks/olm/config.yml
 
 # Create OpenShift user
 /usr/bin/oc create user admin
